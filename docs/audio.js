@@ -1,0 +1,12 @@
+import {NOTES} from './core.js';
+const SR=22050,TAU=Math.PI*2;
+export class Audio{
+ constructor(){this.ctx=null;this.cur=-1;this.muted=false;this.voiceNode=null;this.bgmNode=null}
+ async unlock(){try{if(!this.ctx){this.ctx=new(window.AudioContext||window.webkitAudioContext)();this.master=this.ctx.createGain();this.master.gain.value=this.muted?0:1;this.master.connect(this.ctx.destination);this.voices=NOTES.map(([,f])=>this.make(Math.round(SR*Math.max(1,Math.round(f*.5))/f),i=>{let t=i/SR,amps=[1,.7,.55,.25,.3,.12,.08];return amps.reduce((v,a,k)=>v+a*Math.sin(TAU*f*(k+1)*t),0)/3}));this.effects={shout:this.make(SR*.7,(i)=>{const t=i/SR,ph=TAU*(180*t+250*t*t);return (Math.sin(ph)+.5*Math.sin(2*ph)+.3*(Math.random()*2-1))*Math.min(1,t*30)*Math.exp(-t*3)*.8}),thud:this.make(SR*.2,i=>{let t=i/SR;return Math.sin(TAU*70*t)*Math.exp(-t*25)+.3*(Math.random()*2-1)*Math.exp(-t*40)}),pickup:this.make(Math.floor(SR*.07)*3,i=>{const n=Math.floor(SR*.07),t=(i%n)/SR;return Math.sin(TAU*[880,1175,1568][Math.floor(i/n)]*t)*Math.exp(-t*20)*.7})};const notes=[523,659,784,659,587,698,880,784,659,784,880,1047,880,784,659,523],n=Math.floor(SR*.2),gap=Math.floor(SR*.025);this.bgm=this.make((n+gap)*notes.length,i=>{const idx=Math.floor(i/(n+gap)),j=i%(n+gap);if(j>=n)return 0;let t=j/SR,e=Math.min(1,t/.015)*Math.min(1,(.2-t)/.04),ph=TAU*notes[idx]*t;return (Math.sin(ph)+.25*Math.sin(ph*2)+.08*Math.sin(ph*3))*e*.35+Math.sin(TAU*[131,131,175,196][Math.floor(idx/4)]*t)*e*.1});this.bgmNode=this.playBuffer(this.bgm,.05,true)}await this.ctx.resume()}catch(e){console.warn('音声を初期化できません',e)}}
+ make(n,fn){n=Math.floor(n);const b=this.ctx.createBuffer(1,n,SR),data=b.getChannelData(0);for(let i=0;i<n;i++)data[i]=Math.max(-1,Math.min(1,fn(i)))*.5;return b}
+ playBuffer(b,volume=1,loop=false){let s=this.ctx.createBufferSource(),gain=this.ctx.createGain();s.buffer=b;s.loop=loop;gain.gain.value=volume;s.connect(gain).connect(this.master);s.start();return {s,gain}}
+ sing(n){if(!this.ctx||n===this.cur)return;this.stop();this.voiceNode=this.playBuffer(this.voices[n],.6,true);this.cur=n}
+ stop(){if(this.voiceNode){const {s,gain}=this.voiceNode,now=this.ctx.currentTime;gain.gain.setValueAtTime(gain.gain.value,now);gain.gain.linearRampToValueAtTime(0,now+.08);s.stop(now+.081);this.voiceNode=null}this.cur=-1}
+ play(name){if(this.ctx)this.playBuffer(this.effects[name])}
+ toggle(){this.muted=!this.muted;if(this.master)this.master.gain.value=this.muted?0:1;return this.muted}
+}
